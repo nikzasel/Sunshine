@@ -110,6 +110,69 @@ namespace portal {
 }  // namespace portal
 #endif
 
+#if defined(SUNSHINE_BUILD_NIRI) && defined(SUNSHINE_TESTS)
+namespace niri {
+  /**
+   * @brief An output that unit tests hand to the niri backend instead of a Wayland output.
+   */
+  struct output_for_testing_t {
+    std::string name;  ///< Connector name, or an empty string for an output without one.
+    int offset_x = 0;  ///< Logical X position.
+    int offset_y = 0;  ///< Logical Y position.
+    int width = 0;  ///< Logical width.
+    int height = 0;  ///< Logical height.
+  };
+
+  /**
+   * @brief The stream that the niri backend configured for the shared PipeWire display.
+   */
+  struct configured_stream_for_testing_t {
+    int pipewire_fd = 0;  ///< PipeWire file descriptor, or -1 for the local PipeWire daemon.
+    std::uint32_t pipewire_node = 0;  ///< PipeWire node id of the stream.
+    std::uint64_t pipewire_object_serial = 0;  ///< PipeWire object serial of the stream.
+    int offset_x = 0;  ///< X position of the captured output.
+    int offset_y = 0;  ///< Y position of the captured output.
+    int width = 0;  ///< Width of the captured output.
+    int height = 0;  ///< Height of the captured output.
+  };
+
+  /**
+   * @brief Talk to org.gnome.Mutter.ScreenCast on the given bus instead of the session bus.
+   *
+   * @param bus_address Address of the message bus.
+   */
+  void set_bus_address_for_testing(const std::string &bus_address);
+
+  /**
+   * @brief Use the given outputs instead of the outputs of the Wayland compositor.
+   *
+   * @param outputs Outputs in any order.
+   */
+  void set_outputs_for_testing(const std::vector<output_for_testing_t> &outputs);
+
+  /**
+   * @brief Wait the given time for PipeWireStreamAdded instead of the default timeout.
+   *
+   * @param timeout Time to wait after Start.
+   */
+  void set_stream_added_timeout_for_testing(std::chrono::milliseconds timeout);
+
+  /**
+   * @brief Restore the session bus, the Wayland outputs and the default timeout.
+   */
+  void reset_overrides_for_testing();
+
+  /**
+   * @brief Configure the stream of a niri display, then stop its session.
+   *
+   * @param display_name Connector name of the output to record, or an empty string for the first output.
+   * @param stream Receives the configured stream.
+   * @return 0 on success, -1 on failure.
+   */
+  int configure_stream_for_testing(const std::string &display_name, configured_stream_for_testing_t &stream);
+}  // namespace niri
+#endif
+
 namespace platf {
   /**
    * @brief Remove environment variables that can load untrusted GUI modules.
