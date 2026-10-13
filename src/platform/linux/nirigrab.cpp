@@ -15,12 +15,14 @@
  */
 // standard includes
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 // local includes
+#include "misc.h"
 #include "pipewire.cpp"
 
 using namespace std::literals;
@@ -69,12 +71,91 @@ namespace niri {
   };
 
   /**
+   * @brief Source of the Wayland outputs that the backend can record.
+   */
+  using monitors_provider_t = std::function<std::vector<std::unique_ptr<wl::monitor_t>>()>;
+
+  /**
+   * @brief Source of the connection to the bus that serves org.gnome.Mutter.ScreenCast.
+   */
+  using bus_provider_t = std::function<GDBusConnection *(GError **)>;
+
+  /**
+   * @brief List the outputs of the Wayland compositor.
+   *
+   * @return Outputs that the compositor advertises.
+   */
+  inline std::vector<std::unique_ptr<wl::monitor_t>> wayland_monitors() {
+    return wl::monitors();
+  }
+
+  /**
+   * @brief Connect to the session bus.
+   *
+   * @param err Receives the error on failure.
+   * @return Session bus connection, or nullptr on failure.
+   */
+  inline GDBusConnection *connect_session_bus(GError **err) {
+    return g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, err);
+  }
+
+  /**
+   * @brief Return the source of the Wayland outputs.
+   *
+   * Unit-test builds expose a mutable provider so tests can describe outputs without a
+   * compositor. Production builds keep the provider const and always ask Wayland.
+   *
+   * @return Outputs provider for the current build.
+   */
+  inline auto &monitors_provider() {
+#ifdef SUNSHINE_TESTS
+    static monitors_provider_t provider = wayland_monitors;
+#else
+    static const monitors_provider_t provider = wayland_monitors;
+#endif
+    return provider;
+  }
+
+  /**
+   * @brief Return the source of the bus connection.
+   *
+   * Unit-test builds expose a mutable provider so tests can serve the API on a private bus.
+   * Production builds keep the provider const and always use the session bus.
+   *
+   * @return Bus connection provider for the current build.
+   */
+  inline auto &bus_provider() {
+#ifdef SUNSHINE_TESTS
+    static bus_provider_t provider = connect_session_bus;
+#else
+    static const bus_provider_t provider = connect_session_bus;
+#endif
+    return provider;
+  }
+
+  /**
+   * @brief Return how long Start waits for PipeWireStreamAdded or Session.Closed.
+   *
+   * Unit-test builds expose a mutable value so the timeout test does not wait seconds.
+   *
+   * @return Timeout in milliseconds for the current build.
+   */
+  inline auto &stream_added_timeout_ms() {
+#ifdef SUNSHINE_TESTS
+    static guint timeout_ms = STREAM_ADDED_TIMEOUT_MS;
+#else
+    static const guint timeout_ms = STREAM_ADDED_TIMEOUT_MS;
+#endif
+    return timeout_ms;
+  }
+
+  /**
    * @brief Wayland outputs sorted by position, so names and the fallback output are stable.
    *
    * @return Outputs that carry a connector name, left to right, then top to bottom.
    */
   inline std::vector<std::unique_ptr<wl::monitor_t>> sorted_monitors() {
-    auto monitors = wl::monitors();
+    auto monitors = monitors_provider()();
     std::erase_if(monitors, [](const auto &monitor) {
       return monitor->name.empty();
     });
@@ -88,13 +169,13 @@ namespace niri {
   }
 
   /**
-   * @brief Connect to the session bus.
+   * @brief Connect to the bus that serves org.gnome.Mutter.ScreenCast (the session bus).
    *
-   * @return Session bus connection, or nullptr on failure.
+   * @return Bus connection, or nullptr on failure.
    */
   inline GDBusConnection *session_bus() {
     g_autoptr(GError) err = nullptr;
-    GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &err);
+    GDBusConnection *conn = bus_provider()(&err);
     if (!conn) {
       BOOST_LOG(error) << "[nirigrab] Could not connect to the session bus: "sv << err->message;
     }
@@ -381,7 +462,7 @@ namespace niri {
       }
 
       if (result == 0) {
-        GSource *timeout = g_timeout_source_new(STREAM_ADDED_TIMEOUT_MS);
+        GSource *timeout = g_timeout_source_new(stream_added_timeout_ms());
         g_source_set_callback(timeout, on_stream_added_timeout, &state, nullptr);
         g_source_attach(timeout, context);
         g_main_loop_run(loop);
@@ -394,7 +475,7 @@ namespace niri {
           BOOST_LOG(error) << "[nirigrab] Compositor closed session "sv << session_path << " before PipeWireStreamAdded on "sv << stream_path;
           result = -1;
         } else {
-          BOOST_LOG(error) << "[nirigrab] No PipeWire node id for "sv << stream_path << ": no PipeWireStreamAdded within "sv << STREAM_ADDED_TIMEOUT_MS << " ms, or one with an unexpected signature"sv;
+          BOOST_LOG(error) << "[nirigrab] No PipeWire node id for "sv << stream_path << ": no PipeWireStreamAdded within "sv << stream_added_timeout_ms() << " ms, or one with an unexpected signature"sv;
           result = -1;
         }
       }
@@ -490,6 +571,58 @@ namespace niri {
 
     std::unique_ptr<screencast_t> screencast;  ///< Active org.gnome.Mutter.ScreenCast session.
   };
+
+#ifdef SUNSHINE_TESTS
+  void set_bus_address_for_testing(const std::string &bus_address) {
+    bus_provider() = [bus_address](GError **err) {
+      return g_dbus_connection_new_for_address_sync(
+        bus_address.c_str(),
+        static_cast<GDBusConnectionFlags>(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT | G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+        nullptr,
+        nullptr,
+        err
+      );
+    };
+  }
+
+  void set_outputs_for_testing(const std::vector<output_for_testing_t> &outputs) {
+    monitors_provider() = [outputs]() {
+      std::vector<std::unique_ptr<wl::monitor_t>> monitors;
+      for (const auto &output : outputs) {
+        auto monitor = std::make_unique<wl::monitor_t>(nullptr);
+        monitor->name = output.name;
+        monitor->viewport.offset_x = output.offset_x;
+        monitor->viewport.offset_y = output.offset_y;
+        monitor->viewport.logical_width = output.width;
+        monitor->viewport.logical_height = output.height;
+        monitors.emplace_back(std::move(monitor));
+      }
+      return monitors;
+    };
+  }
+
+  void set_stream_added_timeout_for_testing(std::chrono::milliseconds timeout) {
+    stream_added_timeout_ms() = static_cast<guint>(timeout.count());
+  }
+
+  void reset_overrides_for_testing() {
+    bus_provider() = connect_session_bus;
+    monitors_provider() = wayland_monitors;
+    stream_added_timeout_ms() = STREAM_ADDED_TIMEOUT_MS;
+  }
+
+  int configure_stream_for_testing(const std::string &display_name, configured_stream_for_testing_t &stream) {
+    pw_init(nullptr, nullptr);
+    // Value-initialized like the display that niri_display() creates.
+    const auto display = std::make_shared<niri_t>();
+    const int result = display->configure_stream(display_name, stream.pipewire_fd, stream.pipewire_node, stream.pipewire_object_serial);
+    stream.offset_x = display->offset_x;
+    stream.offset_y = display->offset_y;
+    stream.width = display->width;
+    stream.height = display->height;
+    return result;
+  }
+#endif
 }  // namespace niri
 
 // Public API for misc.cpp
