@@ -329,6 +329,13 @@ LizardByte has the full documentation hosted on [Read the Docs](https://docs.liz
         <td>➖</td>
         <td>➖</td>
     </tr>
+    <tr>
+        <td>niri ScreenCast</td>
+        <td>❔</td>
+        <td>✅</td>
+        <td>➖</td>
+        <td>➖</td>
+    </tr>
 </table>
 
 <table>
@@ -382,9 +389,16 @@ LizardByte has the full documentation hosted on [Read the Docs](https://docs.liz
         <td>✅</td>
         <td>✅</td>
     </tr>
+    <tr>
+        <td>niri ScreenCast</td>
+        <td>❔</td>
+        <td>❔</td>
+        <td>✅</td>
+        <td>❔</td>
+    </tr>
 </table>
 
-**Legend:** ✅ Supported | 🟡 Partial Support | ❌ Not Yet Supported | ➖ Not Applicable
+**Legend:** ✅ Supported | 🟡 Partial Support | ❌ Not Yet Supported | ❔ Not Yet Tested | ➖ Not Applicable
 
 ## 🖥️ System Requirements
 
