@@ -286,6 +286,20 @@ elseif(${SUNSHINE_ENABLE_KWIN} AND NOT WAYLAND_FOUND)
     message(FATAL_ERROR "SUNSHINE_ENABLE_KWIN requires SUNSHINE_ENABLE_WAYLAND — KWin capture disabled")
 endif()
 
+# niri ScreenCast (direct org.gnome.Mutter.ScreenCast D-Bus API, bypasses portal)
+# Built only on top of what the other capture methods already require, so this option never adds a
+# dependency or fails the configure step: it needs Wayland, and PipeWire from KWin or the portal.
+set(NIRI_FOUND OFF)
+if(PIPEWIRE_FOUND AND GIO_FOUND AND WAYLAND_FOUND AND ${SUNSHINE_ENABLE_NIRI})
+    set(NIRI_FOUND ON)
+    add_compile_definitions(SUNSHINE_BUILD_NIRI)
+    list(APPEND PLATFORM_TARGET_FILES
+            "${CMAKE_SOURCE_DIR}/src/platform/linux/nirigrab.cpp")
+elseif(${SUNSHINE_ENABLE_NIRI})
+    message(STATUS "niri capture disabled: it needs SUNSHINE_ENABLE_WAYLAND and PipeWire "
+            "(SUNSHINE_ENABLE_KWIN or SUNSHINE_ENABLE_PORTAL)")
+endif()
+
 if(NOT ${CUDA_FOUND}
         AND NOT ${LIBDRM_FOUND}
         AND NOT ${LIBVA_FOUND}

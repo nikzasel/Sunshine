@@ -2247,7 +2247,7 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
             @endcode</td>
     </tr>
     <tr>
-        <td rowspan="6">Choices</td>
+        <td rowspan="8">Choices</td>
         <td>nvfbc</td>
         <td>Use NVIDIA Frame Buffer Capture to capture direct to GPU memory. This is usually the fastest method for
             NVIDIA cards. NvFBC does not have native Wayland support and does not work with XWayland.
@@ -2276,6 +2276,14 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
         <td>x11</td>
         <td>Uses XCB. This is the slowest and most CPU intensive so should be avoided if possible.
             @note{Applies to FreeBSD and Linux only.}</td>
+    </tr>
+    <tr>
+        <td>niri</td>
+        <td>Capture with the niri Wayland compositor through its org.gnome.Mutter.ScreenCast D-Bus API. This
+            bypasses xdg-desktop-portal, so it never shows a source-selection dialog and needs no restore token.
+            Never selected automatically; set it explicitly. `output_name` takes a niri connector name (e.g. `DP-1`).
+            Not available in the Flatpak package, whose sandbox is not allowed to talk to org.gnome.Mutter.ScreenCast.
+            @note{Applies to Linux only.}</td>
     </tr>
     <tr>
         <td>ddx</td>

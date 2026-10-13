@@ -1158,6 +1158,9 @@ namespace platf {
 #ifdef SUNSHINE_BUILD_PORTAL
       PORTAL,  ///< XDG PORTAL
 #endif
+#ifdef SUNSHINE_BUILD_NIRI
+      NIRI,  ///< niri ScreenCast (org.gnome.Mutter.ScreenCast)
+#endif
       MAX_FLAGS  ///< The maximum number of flags
     };
   }  // namespace source
@@ -1306,6 +1309,16 @@ namespace platf {
   }
 #endif
 
+#ifdef SUNSHINE_BUILD_NIRI
+  bool niri_available();
+  std::vector<std::string> niri_display_names();
+  std::shared_ptr<display_t> niri_display(mem_type_e hwdevice_type, const std::string &display_name, const video::config_t &config);
+
+  bool verify_niri() {
+    return window_system == window_system_e::WAYLAND && niri_available() && !niri_display_names().empty();
+  }
+#endif
+
   /**
    * @brief List display names accepted by the selected capture backend.
    */
@@ -1339,6 +1352,11 @@ namespace platf {
 #ifdef SUNSHINE_BUILD_KWIN
     if (sources[source::KWIN]) {
       return kwin_display_names();
+    }
+#endif
+#ifdef SUNSHINE_BUILD_NIRI
+    if (sources[source::NIRI]) {
+      return niri_display_names();
     }
 #endif
     return {};
@@ -1407,6 +1425,12 @@ namespace platf {
     if (sources[source::KWIN]) {
       BOOST_LOG(info) << "Screencasting with KWin ScreenCast"sv;
       return kwin_display(hwdevice_type, display_name, config);
+    }
+#endif
+#ifdef SUNSHINE_BUILD_NIRI
+    if (sources[source::NIRI]) {
+      BOOST_LOG(info) << "Screencasting with niri ScreenCast"sv;
+      return niri_display(hwdevice_type, display_name, config);
     }
 #endif
 
@@ -1495,6 +1519,12 @@ namespace platf {
 #ifdef SUNSHINE_BUILD_PORTAL
     if (portal_available || (config::video.capture.empty() && sources.none() && verify_portal())) {
       sources[source::PORTAL] = true;
+    }
+#endif
+#ifdef SUNSHINE_BUILD_NIRI
+    // Only an explicit `capture = niri` selects this method, never the automatic selection above.
+    if (selected_capture == "niri" && verify_niri()) {
+      sources[source::NIRI] = true;
     }
 #endif
 
